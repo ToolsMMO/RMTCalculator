@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Convertidor</title>
+
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0d0d0d;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  .wrapper {
+    display: flex;
+    gap: 20px;
+  }
+
+  .box {
+    background: #1c1c1c;
+    padding: 24px;
+    border-radius: 12px;
+    width: 320px;
+  }
+
+  h3 { color: white; margin: 0 0 10px; }
+
+  label {
+    font-size: 13px;
+    color: #bbb;
+    margin-top: 12px;
+    display: block;
+  }
+
+  input, select, button {
+    width: 100%;
+    height: 38px;
+    padding: 0 10px;
+    margin-top: 5px;
+    border-radius: 6px;
+    border: 1px solid #333;
+    background: #2a2a2a;
+    color: #fff;
+  }
+
+  button { cursor: pointer; background: #333; }
+
+  .row { display: flex; gap: 8px; }
+
+  #rate { margin-top: 12px; color: #aaa; }
+  .result { margin-top: 6px; font-size: 18px; font-weight: bold; color: #4ade80;  }
+  .result-GC {margin-top: 2px; font-size: 10px; color: #fffb00; float: right;  clear: right; }
+  .timer { font-size: 16px; margin-top: 8px; color: #ddd;  }
+
+  @media (max-width: 700px) {
+    .wrapper { flex-direction: column; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- IZQUIERDA -->
+  <div class="box">
+    <h3>Convertidor</h3>
+
+    <label>Game Currency (GC)</label>
+    <input type="number" id="gc" value="250">
+
+    <label>Precio total</label>
+    <input type="number" id="price" value="195" step="0.01">
+
+    <label>Moneda</label>
+    <select id="currency">
+      <option value="MXN">MXN - Peso mexicano</option>
+      <option value="USD">USD - Dólar</option>
+      <option value="VES">VES - Bolívar venezolano</option>
+      <option value="ARS">ARS - Peso argentino</option>
+      <option value="COP">COP - Peso colombiano</option>
+      <option value="CLP">CLP - Peso chileno</option>
+      <option value="PEN">PEN - Sol peruano</option>
+      <option value="BRL">BRL - Real brasileño</option>
+      <option value="UYU">UYU - Peso uruguayo</option>
+      <option value="PYG">PYG - Guaraní paraguayo</option>
+      <option value="BOB">BOB - Boliviano</option>
+      <option value="DOP">DOP - Peso dominicano</option>
+      <option value="GTQ">GTQ - Quetzal</option>
+      <option value="HNL">HNL - Lempira</option>
+      <option value="NIO">NIO - Córdoba</option>
+      <option value="CRC">CRC - Colón</option>
+      <option value="EUR">EUR - Euro</option>
+      <option value="GBP">GBP - Libra</option>
+      <option value="JPY">JPY - Yen</option>
+    </select>
+
+    <div id="rate">Cargando tipo de cambio...</div>
+    <div class="result" id="result">0.00 USD</div>
+  </div>
+
+  <!-- DERECHA -->
+  <div class="box">
+    <h3>Sesión de farmeo</h3>
+
+    <label>Game Currency farmeado</label>
+    <input type="number" id="farmedGC" placeholder="Ej: 10000">
+
+    <div class="timer" id="timer">00:00:00</div>
+
+    <div class="row">
+      <button id="startPause">Start</button>
+      <button id="reset">New Session</button>
+    </div>
+
+   
+    <div class="result-GC" id="gcPerHour">0 GC/h</div>
+    <div class="result-GC" id="perHour">0.00 USD/h</div>
+    <div class="result" id="farmResult">0.00 USD</div>
+    
+    
+  </div>
+
+</div>
+
+<script>
+let rate = 1;
+
+// ===== TIMER =====
+let seconds = 0;
+let running = false;
+let interval = null;
+
+function formatTime(sec) {
+  const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const s = String(sec % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+function updateTimer() {
+  document.getElementById("timer").innerText = formatTime(seconds);
+}
+
+function toggleTimer() {
+  running = !running;
+
+  if (running) {
+    document.getElementById("startPause").innerText = "Pause";
+    interval = setInterval(() => {
+      seconds++;
+      updateTimer();
+      calcularTodo();
+    }, 1000);
+  } else {
+    document.getElementById("startPause").innerText = "Start";
+    clearInterval(interval);
+  }
+}
+
+function resetSession() {
+  seconds = 0;
+  document.getElementById("farmedGC").value = "";
+  updateTimer();
+  calcularTodo();
+}
+
+// ===== CONVERSION =====
+async function getRate() {
+  const currency = document.getElementById("currency").value;
+
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/USD");
+    const data = await res.json();
+
+    rate = data.rates[currency];
+
+    document.getElementById("rate").innerText =
+      `1 USD = ${rate} ${currency}`;
+
+    calcularTodo();
+  } catch {
+    document.getElementById("rate").innerText =
+      "Error al cargar tipo de cambio";
+  }
+}
+
+function calcularBase() {
+  const price = parseFloat(document.getElementById("price").value) || 0;
+  return price / rate;
+}
+
+function calcularFarm() {
+  const farmedGC = parseFloat(document.getElementById("farmedGC").value) || 0;
+  const baseGC = parseFloat(document.getElementById("gc").value) || 1;
+  const price = parseFloat(document.getElementById("price").value) || 0;
+
+  const value = (farmedGC * price) / baseGC;
+  return value / rate;
+}
+
+function calcularTodo() {
+  const usdBase = calcularBase();
+  const usdFarm = calcularFarm();
+  const farmedGC = parseFloat(document.getElementById("farmedGC").value) || 0;
+
+  document.getElementById("result").innerText =
+    `${usdBase.toFixed(2)} USD`;
+
+  document.getElementById("farmResult").innerText =
+    `${usdFarm.toFixed(2)} USD`;
+
+  let usdPerHour = 0;
+  let gcPerHour = 0;
+
+  // ✅ FIX: antes estaba > 60
+  if (seconds > 0) {
+    const hours = seconds / 3600;
+
+    usdPerHour = usdFarm / hours;
+    gcPerHour = farmedGC / hours;
+  }
+
+  document.getElementById("perHour").innerText =
+    `${usdPerHour.toFixed(2)} USD/h`;
+
+  document.getElementById("gcPerHour").innerText =
+    `${gcPerHour.toFixed(0)} GC/h`;
+}
+
+// ===== EVENTOS =====
+["gc","price","farmedGC"].forEach(id =>
+  document.getElementById(id).addEventListener("input", calcularTodo)
+);
+
+document.getElementById("currency").addEventListener("change", getRate);
+document.getElementById("startPause").addEventListener("click", toggleTimer);
+document.getElementById("reset").addEventListener("click", resetSession);
+
+// init
+updateTimer();
+getRate();
+</script>
+
+</body>
+</html>
